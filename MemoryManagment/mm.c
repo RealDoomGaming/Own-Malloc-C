@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #include "mm.h"
 
@@ -17,16 +19,16 @@ header_t *first = NULL, *last = NULL;
 // we also need a global lock so in the future we can lock the header struct so
 // only 1 thread can use it else it could cause problems if multiple threads
 // tried allocating to the same memory at the same time
-pthread_mutex_t gobal_lock;
+pthread_mutex_t global_lock;
 
 header_t *get_first_free_header(size_t size);
 
 void *memory_alloc(size_t size) {
   // we first look if size is even valid
-  if (size == NULL || size == 0) {
+  if (!size) {
     perror("Memory Allocation");
     printf("There was an error allocating the memory because the given size "
-           "was null or 0");
+           "was null or 0\n");
     return NULL;
   }
 
@@ -34,7 +36,7 @@ void *memory_alloc(size_t size) {
   // with the right amount of size for our use case
   // also we need to lock the mutex here before we try to do any memory
   // managment stuff
-  pthread_mutex_lock(&gobal_lock);
+  pthread_mutex_lock(&global_lock);
   // then we need to get a struct which is free but also has the right size for
   // our use
   header_t *header = get_first_free_header(size);
@@ -43,13 +45,16 @@ void *memory_alloc(size_t size) {
     // we need to mark this block now as not free but we also need to unlock the
     // mutex and return this header
     header->free = 0;
-    pthread_mutex_unlock(&gobal_lock);
+    pthread_mutex_unlock(&global_lock);
     // what we return here is a bit complicated but its basically just the
     // memory adress next to the header in the heap which is basically the same
     // size as the header and because we convert it to a void pointer it just
     // points there and
     return (void *)(header + 1);
   }
+
+  // if we didnt find anything we can just get rid of the pointer
+  free(header);
 
   // now we also need to do something once we conclude that we dont the right
   // header file for the right size this will always happen at the beginning
@@ -63,11 +68,63 @@ void *memory_alloc(size_t size) {
   // memory with either the sbrk or with the mmap sbrk is for lighter workloads
   // and is faster but bigger workloads will performe better with mmap
 
+  // we will have to define a void pointer to the future block we allocate
+  // memory for up here so we can use it in either way and only have to define
+  // it once
+  void *block;
   if (size_total <= THRESHOLD) {
     // if the size is smaller then 128KB then we use sbrk
+    block = sbrk(size_total);
+
   } else {
     // else if the size is bigger then 128KB then we us mmap
+    // now this mmap might look a bit more confusing then the sbrk function so
+    // let me explain everything NULL -> we could give it a dedicated memory
+    // adress but we tell the kernel that they can pick whatever memory adress
+    // they want
+    // size_total -> length of the allocated memory
+    // PROT_READ | PROT_WRITE -> this is the memory acess permission, so we tell
+    // the kernel we want to read and write stuff into the memoy
+    // MAP_PRIVATE | MAP_ANONYMOUS -> this tells the kernel how you are mapping
+    // and how it will behave so this means that we want a private chunck of
+    // memory which is not tied to any file
+    // -1 -> this is just the file descriptor (fd), normally mmap maps files but
+    // when you dont want that and use MAP_ANONYMOUS then we have to pass -1
+    // here
+    // 0 -> this is the offset into the file, again since we dont map a file we
+    // put 0 here
+    block = mmap(NULL, size_total, PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   }
+
+  // if there was an error either getting memory from the os with mmap or with
+  // sbrk then we unlock the mutex and return;
+  if (block == MAP_FAILED || block == (void *)-1) {
+    pthread_mutex_unlock(&global_lock);
+
+    perror("Memory Allocation");
+    printf("Allocating memory failed because either the sbrk or the mmap "
+           "failed\n");
+    return NULL;
+  }
+
+  // after we know that we were able to allocate memory we can create the new
+  // header and set all its variables
+  header_t *new_header = block;
+  new_header->size = size;
+  new_header->free = 0;
+  new_header->next = NULL;
+
+  if (!first) {
+    first = new_header;
+  }
+  if (last) {
+    last->next = new_header;
+  }
+  last = new_header;
+  pthread_mutex_unlock(&global_lock);
+
+  return (void *)(new_header + 1);
 }
 
 header_t *get_first_free_header(size_t size) {

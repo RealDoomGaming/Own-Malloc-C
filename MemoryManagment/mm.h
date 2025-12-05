@@ -12,10 +12,10 @@ typedef struct Header_T {
   size_t size;
   unsigned free;
   struct Header_T *next;
-  struct Header_T *before;
 } header_t __attribute__((aligned(16)));
 // the aligned 16 is for efficency and else the program would automatically put
-// it at 24 bytes but we only need 16
+// it at 8 bytes because thats the biggest variable in our struct (the pointer)
+// but we only need 16
 
 // this function will just allocate memory with using sbrk for smaller work
 // loads and mmap for bigger work loads It will basically just look in our
