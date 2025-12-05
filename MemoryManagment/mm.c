@@ -1,0 +1,92 @@
+#include <pthread.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "mm.h"
+
+// here we define when we want to ues sbrk and mmap, like for which amount of
+// byte anything below 128KB we can use sbrk but aynthing above that we have to
+// ues mmap
+#define THRESHOLD (128 * 1024)
+
+// we have a global variable for our first and last element in the linked list
+// so we can manage it easier
+header_t *first = NULL, *last = NULL;
+// we also need a global lock so in the future we can lock the header struct so
+// only 1 thread can use it else it could cause problems if multiple threads
+// tried allocating to the same memory at the same time
+pthread_mutex_t gobal_lock;
+
+header_t *get_first_free_header(size_t size);
+
+void *memory_alloc(size_t size) {
+  // we first look if size is even valid
+  if (size == NULL || size == 0) {
+    perror("Memory Allocation");
+    printf("There was an error allocating the memory because the given size "
+           "was null or 0");
+    return NULL;
+  }
+
+  // after validating everything we need to see if we have a struct in the list
+  // with the right amount of size for our use case
+  // also we need to lock the mutex here before we try to do any memory
+  // managment stuff
+  pthread_mutex_lock(&gobal_lock);
+  // then we need to get a struct which is free but also has the right size for
+  // our use
+  header_t *header = get_first_free_header(size);
+  // if we got back a free block we can return it to the user
+  if (header) {
+    // we need to mark this block now as not free but we also need to unlock the
+    // mutex and return this header
+    header->free = 0;
+    pthread_mutex_unlock(&gobal_lock);
+    // what we return here is a bit complicated but its basically just the
+    // memory adress next to the header in the heap which is basically the same
+    // size as the header and because we convert it to a void pointer it just
+    // points there and
+    return (void *)(header + 1);
+  }
+
+  // now we also need to do something once we conclude that we dont the right
+  // header file for the right size this will always happen at the beginning
+  // because the linked list doesnt have any elements so the while loop in our
+  // helper function is instantly null
+
+  // we need to get the toal size of the size we want + our header since the
+  // header will alwasy be before our actual memory
+  size_t size_total = sizeof(header_t) + size;
+  // since we dont have anything in the linked list we also now need to request
+  // memory with either the sbrk or with the mmap sbrk is for lighter workloads
+  // and is faster but bigger workloads will performe better with mmap
+
+  if (size_total <= THRESHOLD) {
+    // if the size is smaller then 128KB then we use sbrk
+  } else {
+    // else if the size is bigger then 128KB then we us mmap
+  }
+}
+
+header_t *get_first_free_header(size_t size) {
+  // the function to getting the first free header with the right size
+
+  // we get the first header in the linked list
+  header_t *current = first;
+  // and then we loop through every element of the linked list until we either
+  // find the right one or we return with null
+  while (current) {
+    // if we find a struct which is currently free and has the size which is
+    // bigger or equal to what we need we return the currently selected struct
+    // from the linked list else we continue and go to the next element
+    if (current->free && current->size >= size) {
+      return current;
+    }
+
+    current = current->next;
+  }
+
+  return NULL;
+}
