@@ -1,5 +1,5 @@
-#ifndef MM_H
-#define MM_H
+#ifndef MM2_H
+#define MM2_H
 
 #include <stddef.h>
 #include <stdint.h>
