@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -125,6 +126,85 @@ void *memory_alloc(size_t size) {
   pthread_mutex_unlock(&global_lock);
 
   return (void *)(new_header + 1);
+}
+
+void free_memory(void *block) {
+  // first we have to check if the current block even exists
+  if (!block) {
+    perror("Free Memory");
+    printf("There was an error freeing the memory because the given block "
+           "wasnt valid");
+    return;
+  }
+
+  // firstly before anything we have to lock it so nothing bad happens
+  pthread_mutex_lock(&global_lock);
+
+  // so here we just make the block to a header_t pointer so then we can do - 1
+  // on it and the pointer moves back header_t amount of bytes from the block
+  // pointer
+  header_t *header = ((header_t *)block) - 1;
+  // then we have the actual header for this block
+
+  // then we can see if the block is at the end of the heap by firstly getting
+  // the programbreak we achive this by using the sbrk but with a 0 as a
+  // parameter
+  void *programbreak = sbrk(0);
+
+  // now if our header is the last one in the heap we release memory to the os
+  // but we also have to change our linked list
+  if ((char *)block + header->size == programbreak) {
+    // if we know for sure that this is the last in the heap
+    // we first have to change the linked list accordingly
+    // and then we have to release the memory to the os (I will explain how that
+    // works later)
+
+    if (first == last) {
+      // if we only have 1 header in the linked list then the first and the last
+      // will be the same
+      first = NULL;
+      last = NULL;
+    } else {
+      // if the first and last elements of the linked list arent the same then
+      // we have to just go through the entire linked list so we can find the
+      // element before the last header and set it to the last
+      header_t *current = first;
+
+      while (current) {
+        // so if we find out the next one is the last one we can just set the
+        // current on to the last one and also set the next to null since we
+        // remove that
+        if (current->next == last) {
+          last = current;
+          current->next = NULL;
+        }
+
+        // else we continue to go though the linked list
+        current = current->next;
+      }
+    }
+
+    // then lastly we have to release the memory to the os, this works though //
+    // calling sbrk and giving a negative value so we release that amount //
+    // going from the end of the heap so for us we will take the size of the
+    // block we have minus the size of // our header_t struct and then go into
+    // minus by subtracting all that from (the programmbreak)
+    sbrk(0 - sizeof(block) - sizeof(header_t));
+
+    // then lastly we return and also unlock the mutex
+    pthread_mutex_unlock(&global_lock);
+    return;
+  }
+
+  // then if its not the case that the header is the last in the heap we can
+  // just set it to free
+  header->free = 1;
+  // but also what we have to do is clear the memory in the block after the
+  // header
+  memset(block, 0, header->size);
+  // and we alos have to unlock the mutex and return
+  pthread_mutex_unlock(&global_lock);
+  return;
 }
 
 header_t *get_first_free_header(size_t size) {

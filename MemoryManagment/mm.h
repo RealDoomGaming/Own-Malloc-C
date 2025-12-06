@@ -22,4 +22,9 @@ typedef struct Header_T {
 // linked list if we have an available header_t which has enough size
 void *memory_alloc(size_t size);
 
+// free_memory wil basically just be my own function of the free function
+// already this just checks if the current block is at the end of the stack then
+// we release memory to the os else we just mark it as free
+void free_memory(void *block);
+
 #endif
