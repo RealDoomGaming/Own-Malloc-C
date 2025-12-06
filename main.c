@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include "./MemoryManagment/mm.h"
+#include "./MemoryManagment/UsingChunck/mm.h"
+#include "./MemoryManagment/UsingSbrk/mm.h"
 
 int main(int argc, char *argv[]) {
   void *random_pointer = memory_alloc(sizeof(void *));
