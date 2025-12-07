@@ -38,7 +38,7 @@ void init_block() {
   // first thing we do is give our heap start all our allocated memory
   heap_start = sbrk(INIT_SIZE);
   // then we want to check if this was successfull ot not
-  if (!first) {
+  if (heap_start == (void *)-1) {
     perror("Initing Block");
     printf("There was an error initing the block because the sbrk failed\n");
     return;
@@ -54,6 +54,7 @@ void init_block() {
   // to NULL because this element is the  first element in the linked list
   header->free = 1;
   header->next = NULL;
+  header->prev = NULL;
   first = header;
   last = header;
 }
@@ -69,7 +70,10 @@ void *memory_from_block(size_t size) {
   // else if we could find anything like that we make a new one and if we cant
   // make a new one we just have to request memory from the os
 
-  // first thing we do is check if this is the first time we make a new alloc so
+  // first thing we do is lock our mutex
+  pthread_mutex_lock(&global_lock);
+
+  // after that we do is check if this is the first time we make a new alloc so
   // then we can make the heap first
   if (first_time) {
     init_block();
@@ -93,11 +97,15 @@ void *memory_from_block(size_t size) {
     header->size = size;
     header->free = 0;
     header->next = NULL;
+    header->prev = last;
 
     // here we also have to set the new header we made as the last element in
     // the linked list
     last->next = header;
     last = header;
+
+    // before we return our new header we have to unlock the mutex
+    pthread_mutex_unlock(&global_lock);
 
     // and then we just return the pointer to that new header
     return (void *)(header + 1);
@@ -115,8 +123,15 @@ void *memory_from_block(size_t size) {
   // after checking if we can split the block we can actually giving the memory
   // to the user back and setting the headers to used instead of free
   header->free = 0;
+
+  // here we also have to unlock the mutex before returning
+  pthread_mutex_unlock(&global_lock);
+
   return (void *)(header + 1);
 }
+
+// here we will now have our free function and its implementation
+void free_memory(void *block) {}
 
 // our actuall implementation for our find_first_free function we defined at the
 // top
@@ -153,6 +168,11 @@ void split_block(block_header *header, size_t size) {
   new_header->size = header->size - size - BLOCK_SIZE;
   new_header->free = 1;
   new_header->next = header->next;
+  new_header->prev = header;
+
+  // we also want to set the next header of our old headers previous to be the
+  // new header since we insert the new header in the middle
+  header->next->prev = new_header;
 
   // after making the new header we can be sure that the old header has the
   // excact size we need and also its next element is the new header
