@@ -170,9 +170,15 @@ void split_block(block_header *header, size_t size) {
   new_header->next = header->next;
   new_header->prev = header;
 
-  // we also want to set the next header of our old headers previous to be the
-  // new header since we insert the new header in the middle
-  header->next->prev = new_header;
+  if (header->next) {
+    // if a next header exists we can take the prev value from it and set
+    // everything how we want it to
+    header->next->prev = new_header;
+  } else {
+    // else we just want to set the new header to the last element in the linked
+    // list
+    last = new_header;
+  }
 
   // after making the new header we can be sure that the old header has the
   // excact size we need and also its next element is the new header
