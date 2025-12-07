@@ -149,6 +149,7 @@ void free_memory(void *block) {
     perror("Freeing Memory");
     printf("There was an error freeing the memory because the given block was "
            "a falsey value\n");
+    pthread_mutex_unlock(&global_lock);
     return;
   }
 
@@ -156,6 +157,7 @@ void free_memory(void *block) {
   block_header *found_header = ((block_header *)block) - 1;
 
   // we also have to clear the memory in the block so its actually free
+  // we could remove it but I leave it here for security
   memset(block, 0, found_header->size);
 
   // then we can set the free value of the found header to 1 to indicate that

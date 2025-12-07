@@ -1,30 +1,34 @@
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -Wextra -g -I.
+CFLAGS = -Wall -Wextra -g -IMemoryManagment/UsingChunck
 
 # Directories
-MM_DIR = MemoryManagment
+CHUNK_DIR = MemoryManagment/UsingChunck
 
 # Source files
-SOURCES = main.c $(MM_DIR)/mm.c
+SRCS = main.c $(CHUNK_DIR)/mm.c
 
 # Object files
-OBJECTS = $(SOURCES:.c=.o)
+OBJS = main.o $(CHUNK_DIR)/mm.o
 
-# Output executable
-TARGET = mallocTest
+# Executable
+EXEC = program
 
 # Default target
-all: $(TARGET)
+all: $(EXEC)
 
-# Link object files to create executable
-$(TARGET): $(OBJECTS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJECTS)
+# Build executable
+$(EXEC): $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $^
 
-# Compile source files to object files
-%.o: %.c
+# Compile main.c
+main.o: main.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile mm.c
+$(CHUNK_DIR)/mm.o: $(CHUNK_DIR)/mm.c $(CHUNK_DIR)/mm.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Clean build artifacts
 clean:
-	rm -f $(OBJECTS) $(TARGET)
+	rm -f $(OBJS) $(EXEC)
