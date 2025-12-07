@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "mm.h"
@@ -33,6 +34,10 @@ block_header *find_first_free(size_t size);
 // now we also need to make a function which splits the memory if its too large
 // but not if the rest is only enough for a header
 void split_block(block_header *header, size_t size);
+// because of performance reasons and also because it could come in handy we
+// could merge free blocks together when two or more which are next to eachother
+// are free
+void merge_block(block_header *header);
 
 void init_block() {
   // first thing we do is give our heap start all our allocated memory
@@ -131,7 +136,38 @@ void *memory_from_block(size_t size) {
 }
 
 // here we will now have our free function and its implementation
-void free_memory(void *block) {}
+void free_memory(void *block) {
+  // this function will basically just check if we have a block then if we have
+  // one we will set its value to free and we also clear everything in the
+  // memory of the block
+
+  // first thing we have to do is of course lock the mutex
+  pthread_mutex_lock(&global_lock);
+
+  // checking if the given block is actually valid
+  if (!block) {
+    perror("Freeing Memory");
+    printf("There was an error freeing the memory because the given block was "
+           "a falsey value\n");
+    return;
+  }
+
+  // finding out what the header before the block is
+  block_header *found_header = ((block_header *)block) - 1;
+
+  // we also have to clear the memory in the block so its actually free
+  memset(block, 0, found_header->size);
+
+  // then we can set the free value of the found header to 1 to indicate that
+  // its free now
+  found_header->free = 1;
+  // before we can actually unlock the mutex we have to merge the block together
+  // which are next to this one if they are free
+  merge_block(found_header);
+
+  // only then can we unlock the mutex
+  pthread_mutex_unlock(&global_lock);
+}
 
 // our actuall implementation for our find_first_free function we defined at the
 // top
@@ -184,4 +220,42 @@ void split_block(block_header *header, size_t size) {
   // excact size we need and also its next element is the new header
   header->size = size;
   header->next = new_header;
+}
+
+void merge_block(block_header *header) {
+  // here we have to firstly check if the next one is free and then merge the
+  // next one with this one
+  if (header->next && header->next->free) {
+    // we add the next blocks size and the header size since we want to also
+    // merge the header
+    header->size += header->next->size + BLOCK_SIZE;
+    // then we set the headers next value to be the same to the next headers
+    // next value
+    header->next = header->next->next;
+
+    // then we have to do stuff with our linked list again
+    if (header->next) {
+      header->next->prev = header;
+    } else {
+      last = header;
+    }
+  }
+
+  // then again we have to do the same stuff with the previous one but this time
+  // we merge our header into the previous one because else everything would get
+  // confusing if the pointer pointed to the middle of the block because the
+  // header is there
+  if (header->prev && header->prev->free) {
+    // firstly we give the previous header a bigger size and also change stuff
+    // in the linked list like we did before
+    header->prev->size += header->size + BLOCK_SIZE;
+
+    header->prev->next = header->next;
+
+    if (header->next) {
+      header->next->prev = header->prev;
+    } else {
+      last = header->prev;
+    }
+  }
 }
