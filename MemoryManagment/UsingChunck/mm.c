@@ -176,20 +176,29 @@ void free_memory(void *block) {
   // finding out what the header before the block is
   block_header *found_header = ((block_header *)block) - 1;
 
-  // we also have to clear the memory in the block so its actually free
-  // we could remove it but I leave it here for security
-  memset(block, 0, found_header->size);
-
   // then we can set the free value of the found header to 1 to indicate that
   // its free now
   found_header->free = 1;
   // with that we also have to put the found header into our free linked list
   found_header->next_free = NULL;
   found_header->prev_free = last_free;
+  // if we have a last value then we reconnect stuff else if there is no last
+  // free we know either something bad happened or we dont have a linked list
+  // yet and everything is NULL
+  if (last_free) {
+    last_free->next_free = found_header;
+  } else {
+    first_free = found_header;
+  }
   last_free = found_header;
+
   // before we can actually unlock the mutex we have to merge the block
   // together which are next to this one if they are free
   merge_block(found_header);
+
+  // last thing we do is call our memset to our block because it provides extra
+  // security and we also clear the stuff if we merged
+  memset(block, 0, found_header->size);
 
   // only then can we unlock the mutex
   pthread_mutex_unlock(&global_lock);
@@ -234,45 +243,47 @@ void split_block(block_header *header, size_t size) {
   // elements we can just add it at the end of the free linked list
   new_header->next_free = NULL;
   new_header->prev_free = last_free;
+  if (last_free) {
+    last_free->next_free = new_header;
+  } else {
+    first_free = new_header;
+  }
   last_free = new_header;
 
   header->size = size;
 }
 
 void merge_block(block_header *header) {
-  // here we have to firstly check if the next one is free and then merge the
-  // next one with this one
-  if (header->next_free && header->next_free->free) {
-    // we add the next blocks size and the header size since we want to also
-    // merge the header
-    header->size += header->next_free->size + BLOCK_SIZE;
-    // then we set the headers next value to be the same to the next headers
-    // next value
-    header->next_free = header->next_free->next_free;
+  // I needed to rewrite this function to check the next headers in the memory
+  // not in my linked list since in there are only free elements
 
-    // then we have to do stuff with our linked list again
-    if (header->next_free) {
-      header->next_free->prev_free = header;
+  // firstly we can get the next in memory by just doing some pointer
+  // arithmitics or however you spell that
+  block_header *next_in_memory =
+      (block_header *)((char *)header + BLOCK_SIZE + header->size);
+
+  // we also need to know where our heap ends to see if the header we got is
+  // actually still in our memory
+  void *heap_end = sbrk(0);
+
+  // now we check if our next header is actually in the heap still and we can
+  // also check if the next header is free
+  if ((void *)next_in_memory < heap_end && next_in_memory->free) {
+    // if thats the case we can merge it together
+    if (next_in_memory->prev_free) {
+      next_in_memory->prev_free->next_free = next_in_memory->next_free;
     } else {
-      last_free = header;
+      first_free = next_in_memory->next_free;
     }
-  }
 
-  // then again we have to do the same stuff with the previous one but this time
-  // we merge our header into the previous one because else everything would get
-  // confusing if the pointer pointed to the middle of the block because the
-  // header is there
-  if (header->prev_free && header->prev_free->free) {
-    // firstly we give the previous header a bigger size and also change stuff
-    // in the linked list like we did before
-    header->prev_free->size += header->size + BLOCK_SIZE;
-
-    header->prev_free->next_free = header->next_free;
-
-    if (header->next_free) {
-      header->next_free->prev_free = header->prev_free;
+    if (next_in_memory->next_free) {
+      next_in_memory->next_free->prev_free = next_in_memory->prev_free;
     } else {
-      last_free = header->prev_free;
+      last_free = next_in_memory->prev_free;
     }
+
+    // after we are done removing the next in memory from the linked list we can
+    // just absorb it into our header
+    header->size += next_in_memory->size + BLOCK_SIZE;
   }
 }
