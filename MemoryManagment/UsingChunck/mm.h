@@ -12,8 +12,8 @@
 typedef struct Block_Header {
   size_t size;
   unsigned free;
-  struct Block_Header *next;
-  struct Block_Header *prev;
+  struct Block_Header *next_free;
+  struct Block_Header *prev_free;
 } block_header __attribute__((aligned(16)));
 // its basically the same struct we just change the name else nothing is
 // different
