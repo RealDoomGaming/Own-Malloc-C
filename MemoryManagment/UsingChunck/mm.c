@@ -19,6 +19,9 @@
 
 // then we can define our first and last element of the linked list
 block_header *first = NULL, *last = NULL;
+// but we also need a linked list for the free headers so we can reduce
+// execution time
+block_header *first_free = NULL, *last_free = NULL;
 // we also make a heap start so we know where our own heap we will make starts
 void *heap_start = NULL;
 // and we also keep track of how much size our block has left which is free
@@ -60,8 +63,8 @@ void init_block() {
   header->free = 1;
   header->next = NULL;
   header->prev = NULL;
-  first = header;
-  last = header;
+  first_free = header;
+  last_free = header;
 }
 // with that our init block function is completed
 // now we can move onto our actuall alloc function
@@ -129,6 +132,43 @@ void *memory_from_block(size_t size) {
   // to the user back and setting the headers to used instead of free
   header->free = 0;
 
+  // so here we now need to check if the first and last free element in the
+  // linked list are the same, with the same meaning our header we found and if
+  // thats the case we can set it both to null and thats done then
+  if (first_free == header && last_free == header) {
+    first_free = NULL;
+    last_free = NULL;
+  } else {
+    // now else we have to check if we have a prev if thats the case we can just
+    // do our normal linked list stuff else we can just the the next of the
+    // header to the first free element
+    if (header->prev) {
+      header->prev->next = header->next;
+
+    } else {
+      first_free = header->next;
+    }
+    // and we do the same with the last free element in the list
+    if (header->next) {
+      header->next->prev = header->prev;
+    } else {
+      last_free = header->prev;
+    }
+  }
+
+  // but we also need to put it into the list without the free elements
+  // we check if we even already have something in that list and if not we can
+  // just put the first and last to that new header;
+  if (first == NULL && last == NULL) {
+    first = header;
+    last = header;
+  } else {
+    // else we can just put it at the end of the linked list
+    header->prev = last;
+    header->next = NULL;
+    last = header;
+  }
+
   // here we also have to unlock the mutex before returning
   pthread_mutex_unlock(&global_lock);
 
@@ -163,8 +203,12 @@ void free_memory(void *block) {
   // then we can set the free value of the found header to 1 to indicate that
   // its free now
   found_header->free = 1;
-  // before we can actually unlock the mutex we have to merge the block together
-  // which are next to this one if they are free
+  // with that we also have to put the found header into our free linked list
+  found_header->next = NULL;
+  found_header->prev = last_free;
+  last_free = found_header;
+  // before we can actually unlock the mutex we have to merge the block
+  // together which are next to this one if they are free
   merge_block(found_header);
 
   // only then can we unlock the mutex
@@ -176,7 +220,7 @@ void free_memory(void *block) {
 block_header *find_first_free(size_t size) {
   // this is basically just a function which goes through our linked list and
   // tries to find a header which is free and has the right size we want
-  block_header *current = first;
+  block_header *current = first_free;
 
   while (current) {
     if (current->free && current->size >= size) {
@@ -205,23 +249,14 @@ void split_block(block_header *header, size_t size) {
   // then we give this header all the attributes we need to give it
   new_header->size = header->size - size - BLOCK_SIZE;
   new_header->free = 1;
-  new_header->next = header->next;
-  new_header->prev = header;
+  // and we also have to put it into the linked list of free elements
+  // meaning we dont have to add the new header into the linked list of not free
+  // elements we can just add it at the end of the free linked list
+  new_header->next = NULL;
+  new_header->prev = last_free;
+  last_free = new_header;
 
-  if (header->next) {
-    // if a next header exists we can take the prev value from it and set
-    // everything how we want it to
-    header->next->prev = new_header;
-  } else {
-    // else we just want to set the new header to the last element in the linked
-    // list
-    last = new_header;
-  }
-
-  // after making the new header we can be sure that the old header has the
-  // excact size we need and also its next element is the new header
   header->size = size;
-  header->next = new_header;
 }
 
 void merge_block(block_header *header) {
