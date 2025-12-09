@@ -23,6 +23,8 @@ int main(int argc, char *argv[]) {
   // and 1 stands for my own malloc
   benchmark_small_allocs(1);
 
+  release_memory();
+
   return 0;
 }
 
@@ -47,17 +49,16 @@ void benchmark_small_allocs(int which) {
   }
   for (int i = 0; i < NUM_ALLOCS_32; i++) {
     if (which) {
-      pointers[i + NUM_ALLOCS_64 - 1] = memory_from_block(SIZE_2);
+      pointers[i + NUM_ALLOCS_64] = memory_from_block(SIZE_2);
     } else {
-      pointers[i + NUM_ALLOCS_64 - 1] = malloc(SIZE_2);
+      pointers[i + NUM_ALLOCS_64] = malloc(SIZE_2);
     }
   }
   for (int i = 0; i < NUM_ALLOCS_128; i++) {
     if (which) {
-      pointers[i + NUM_ALLOCS_64 + NUM_ALLOCS_32 - 1] =
-          memory_from_block(SIZE_3);
+      pointers[i + NUM_ALLOCS_64 + NUM_ALLOCS_32] = memory_from_block(SIZE_3);
     } else {
-      pointers[i + NUM_ALLOCS_64 + NUM_ALLOCS_32 - 1] = malloc(SIZE_3);
+      pointers[i + NUM_ALLOCS_64 + NUM_ALLOCS_32] = malloc(SIZE_3);
     }
   }
   double alloc_time = get_time_ms() - start;
@@ -76,6 +77,8 @@ void benchmark_small_allocs(int which) {
   printf("Allocations: %.3f ms\n", alloc_time);
   printf("Frees: %.3f ms\n", free_time);
   printf("Total: %.3f ms\n\n", alloc_time + free_time);
+
+  free(pointers);
 }
 
 double get_time_ms() {

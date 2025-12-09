@@ -166,7 +166,6 @@ void free_memory(void *block) {
 
   // checking if the given block is actually valid
   if (!block) {
-    perror("Freeing Memory");
     printf("There was an error freeing the memory because the given block was "
            "a falsey value %p\n",
            block);
@@ -208,29 +207,7 @@ void free_memory(void *block) {
 // we also need a function which will free all the memory we use in our heap
 // we have to do this in order to avoid memory leaks since we ourselfs dont
 // really have a choice except calling free on everything
-void release_memory() {
-  // we can use our previous heap start variable to see where our first header
-  // would be and from this one on now go through everything and free it as we
-  // go to the end
-  block_header *first_block = (block_header *)heap_start;
-  // we need to go to the next header with adding the size from the first block
-  // header and then the header size and this in a while loop
-
-  // we firstly get our previous header and also our current header
-  block_header *prev = first_block;
-  block_header *curr =
-      (block_header *)((char *)first_block + BLOCK_SIZE + prev->size);
-  // then while our pointer adress is smaller then the system break we can
-  // continue
-  while ((void *)curr < sbrk(0)) {
-    // calling free on our previous header and on our previous block so we free
-    // everything which came before our current header
-    free((void *)prev);
-    free((void *)((char *)prev + BLOCK_SIZE));
-
-    // then we should re set the pointers curr and prev
-  }
-}
+void release_memory() { sbrk(0 - INIT_SIZE); }
 
 // our actuall implementation for our find_first_free function we defined at the
 // top
